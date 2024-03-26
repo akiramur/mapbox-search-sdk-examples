@@ -1,13 +1,18 @@
 import MapboxSearch
 import UIKit
 
+// In our project this struct has additional properties and conforms to Hashable/Equatable to be used in SwiftUI components
+struct WrappedSuggestion {
+    let suggestion: PlaceAutocomplete.Suggestion
+}
+
 final class PlaceAutocompleteMainViewController: UIViewController {
     @IBOutlet private var tableView: UITableView!
     @IBOutlet private var messageLabel: UILabel!
 
     private lazy var placeAutocomplete = PlaceAutocomplete()
 
-    private var cachedSuggestions: [PlaceAutocomplete.Suggestion] = []
+    private var cachedSuggestions: [WrappedSuggestion] = []
 
     let locationManager = CLLocationManager()
 
@@ -42,7 +47,7 @@ extension PlaceAutocompleteMainViewController: UISearchResultsUpdating {
 
             switch result {
             case .success(let suggestions):
-                self.cachedSuggestions = suggestions
+                self.cachedSuggestions = suggestions.map({ WrappedSuggestion(suggestion: $0) })
                 self.reloadData()
 
             case .failure(let error):
@@ -69,16 +74,16 @@ extension PlaceAutocompleteMainViewController: UITableViewDataSource, UITableVie
             tableViewCell = UITableViewCell(style: .subtitle, reuseIdentifier: cellIdentifier)
         }
 
-        let suggestion = cachedSuggestions[indexPath.row]
+        let wrappedSuggestion = cachedSuggestions[indexPath.row]
 
-        tableViewCell.textLabel?.text = suggestion.name
+        tableViewCell.textLabel?.text = wrappedSuggestion.suggestion.name
         tableViewCell.accessoryType = .disclosureIndicator
 
-        var description = suggestion.description ?? ""
-        if let distance = suggestion.distance {
+        var description = wrappedSuggestion.suggestion.description ?? ""
+        if let distance = wrappedSuggestion.suggestion.distance {
             description += "\n\(PlaceAutocomplete.Result.distanceFormatter.string(fromDistance: distance))"
         }
-        if let estimatedTime = suggestion.estimatedTime {
+        if let estimatedTime = wrappedSuggestion.suggestion.estimatedTime {
             description += "\n\(PlaceAutocomplete.Result.measurementFormatter.string(from: estimatedTime))"
         }
 
@@ -92,7 +97,8 @@ extension PlaceAutocompleteMainViewController: UITableViewDataSource, UITableVie
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: true)
 
-        placeAutocomplete.select(suggestion: cachedSuggestions[indexPath.row]) { [weak self] result in
+        // My best guess is that since PlaceAutocomplete.Suggestion.underlying is not marked as public by the framework, it doesn't get copied and leads to the crash you can observe
+        placeAutocomplete.select(suggestion: cachedSuggestions[indexPath.row].suggestion) { [weak self] result in
             switch result {
             case .success(let suggestionResult):
                 let resultVC = PlaceAutocompleteResultViewController.instantiate(with: suggestionResult)
